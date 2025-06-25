@@ -1,40 +1,58 @@
-// backend/src/middleware/auth.ts corregido con export explícito
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secreto-temporal';
-
-export interface JwtPayload {
-  userId: number;
+// Define el tipo para la carga útil del JWT si es necesario
+interface JwtPayload {
+  userId: string;
   email: string;
-  rol: 'admin' | 'supervisor' | 'agente';
+  rol: string;
 }
 
-export interface AuthenticatedRequest extends Request {
-  user?: JwtPayload;
-}
-
-export const authenticateJWT = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+// Middleware de Autenticación: Verifica y decodifica el JWT
+export function authenticateJWT(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const token = authHeader.split(' ')[1];
+    jwt.verify(token, process.env.JWT_SECRET!, (err, user) => {
+      if (err) {
+        console.log('Error en validación de token:', err); // Asegúrate de que los errores están siendo logueados
+        return res.sendStatus(401);
+      }
+      req.user = jwt.decode(token) as JwtPayload; // Decodifica el token y lo asigna a req.user
+      next();
+    });
+  } else {
+    res.sendStatus(401);
+  }
+}
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Token no proporcionado' });
+// Middleware de Autorización: Verifica si el usuario es un supervisor
+export const soloSupervisores = (req: Request, res: Response, next: NextFunction) => {
+  const { rol } = req.user || {}; // Suponiendo que 'req.user' es establecido por authenticateJWT
+
+  if (rol !== 'supervisor') {
+    return res.status(403).json({ message: 'Acceso denegado: solo supervisores' });
   }
 
-  const token = authHeader.split(' ')[1];
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(401).json({ error: 'Token inválido' });
-  }
+  next();
 };
 
-export const soloSupervisores = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  if (req.user?.rol === 'supervisor' || req.user?.rol === 'admin') {
-    return next();
+// Middleware de Autorización: Verifica si el usuario es un administrador
+export const soloAdmins = (req: Request, res: Response, next: NextFunction) => {
+  const { rol } = req.user || {}; // Suponiendo que 'req.user' es establecido por authenticateJWT
+
+  if (rol !== 'admin') {
+    return res.status(403).json({ message: 'Acceso denegado: solo administradores' });
   }
-  return res.status(403).json({ error: 'Acceso denegado: solo supervisores o admins' });
+
+  next();
 };
+
+// Tipado extendido para Express Request, para evitar errores de TypeScript
+declare global {
+  namespace Express {
+    interface Request {
+      user?: JwtPayload;
+    }
+  }
+}

@@ -24,25 +24,18 @@ export const getUsuarios = async (req: Request, res: Response) => {
   }
 };
 
-// Crear nuevo usuario (solo agentes si lo hace un supervisor)
+// Crear nuevo usuario
 export const createUsuario = async (req: Request, res: Response) => {
   try {
-    const { nombre, email } = req.body;
-
-    // Obtener el rol del usuario autenticado
-    const rolSolicitante = (req as any).user?.rol || 'invitado';
-
-    if (!nombre || !email) {
-      return res.status(400).json({ error: 'Nombre y email son requeridos' });
+    const { nombre, email, rol = 'agente', activo = true } = req.body;
+    
+    if (!nombre || !email || !rol) {
+      return res.status(400).json({ error: 'Datos incompletos' });
     }
 
+    // Crear usuario
     const nuevoUsuario = await prisma.usuario.create({
-      data: {
-        nombre,
-        email,
-        rol: rolSolicitante === 'supervisor' ? 'agente' : 'agente',
-        activo: true,
-      },
+      data: { nombre, email, rol, activo },
       select: {
         id: true,
         nombre: true,
@@ -56,6 +49,29 @@ export const createUsuario = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error al crear usuario:', error);
     res.status(500).json({ error: 'Error al crear usuario' });
+  }
+};
+
+// Actualizar usuario
+export const updateUsuario = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { nombre, apellido, rol, activo } = req.body;
+
+    const usuarioActualizado = await prisma.usuario.update({
+      where: { id: Number(id) },
+      data: {
+        nombre,
+        apellido,
+        rol,
+        activo
+      }
+    });
+
+    res.json(usuarioActualizado);
+  } catch (error) {
+    console.error('Error al actualizar usuario:', error);
+    res.status(500).json({ error: 'Error al actualizar usuario' });
   }
 };
 
