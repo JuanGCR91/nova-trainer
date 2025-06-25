@@ -1,0 +1,125 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id                Int         @id @default(autoincrement())
+  email             String      @unique
+  password          String?
+  nombre            String
+  apellido          String?
+  rol               String      // admin, supervisor, agente
+  activo            Boolean     @default(true)
+  fechaCreacion     DateTime?    @default(now())
+  fechaActualizacion DateTime?   @updatedAt
+
+  // Relaciones
+  simulaciones      Simulacion[]
+  campanasCreadas  Campana[]  @relation("CampanaCreador")
+
+  @@index([email])
+  @@index([rol])
+}
+
+model Campana {
+  id              Int      @id @default(autoincrement())
+  nombre          String
+  descripcion     String?
+  estado          String   @default("activa")
+  fechaInicio     DateTime
+  fechaFin        DateTime?
+  
+  campos          Json
+  prompt          String   @db.Text
+  criteriosEvaluacion Json?
+  
+  creadorId       Int
+  creador         Usuario  @relation("CampanaCreador", fields: [creadorId], references: [id])
+  fechaCreacion   DateTime @default(now())
+  fechaActualizacion DateTime @updatedAt
+  
+  clientes        ClienteSimulado[]
+  
+  @@index([estado])
+  @@index([fechaInicio, fechaFin])
+}
+
+model ClienteSimulado {
+  id                Int           @id @default(autoincrement())
+  campanaId  Int?
+  campana    Campana? @relation(fields: [campanaId], references: [id], onDelete: Cascade)
+
+  // Datos dinámicos del cliente según campos de campana
+  datos             Json?
+
+  // Estado del cliente
+  estado            String        @default("disponible") // disponible, asignado, completado
+  asignadoA         Int?
+  fechaAsignacion   DateTime?
+
+  // Metadata
+  fechaCreacion     DateTime?      @default(now())
+  fechaActualizacion DateTime?     @updatedAt
+
+  // Relaciones
+  simulaciones      Simulacion[]
+
+  @@index([campanaId, estado])
+  @@index([asignadoA])
+}
+
+model Simulacion {
+  id                Int               @id @default(autoincrement())
+  clienteId         Int
+  cliente           ClienteSimulado   @relation(fields: [clienteId], references: [id])
+  usuarioId         Int
+  usuario           Usuario           @relation(fields: [usuarioId], references: [id])
+
+  // Identificador de sesión para IA
+  sessionId         String            @unique
+
+  // Estado de la simulación
+  estado            String            @default("en_progreso") // en_progreso, completada, cancelada
+
+  // Timestamps
+  fechaInicio       DateTime          @default(now())
+  fechaFin          DateTime?
+  duracion          Int?              // en segundos
+
+  // Transcripción de la conversación
+  transcripcion     Json              // Array de { timestamp, emisor, mensaje, esAudio? }
+
+  // Evaluación
+  calificacion      Float?
+  feedback          String?           @db.Text
+  evaluacion        Json?             // Detalles de evaluación (aspectos positivos/negativos)
+
+  // Tipificación
+  tipificacion      Json?             // Datos de tipificación según campana
+
+  // Metadata
+  fechaCreacion     DateTime          @default(now())
+  fechaActualizacion DateTime         @updatedAt
+
+  @@index([usuarioId, estado])
+  @@index([clienteId])
+  @@index([sessionId])
+  @@index([fechaInicio])
+}
+
+model ConfiguracionSistema {
+  id                Int       @id @default(autoincrement())
+  clave             String    @unique
+  valor             Json
+  descripcion       String?
+  fechaCreacion     DateTime  @default(now())
+  fechaActualizacion DateTime @updatedAt
+
+  @@index([clave])
+}
